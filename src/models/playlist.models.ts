@@ -1,4 +1,13 @@
-import mongoose, { Schema } from "mongoose";
+import type { Types } from "mongoose";
+import mongoose, { Document, Schema } from "mongoose";
+
+interface playlistDocument extends Document {
+    _id: Schema.Types.ObjectId;
+    name: string;
+    description: string;
+    videos: Types.Array<Types.ObjectId>;
+    owner: Schema.Types.ObjectId;
+}
 
 const playlistSchema = new Schema(
     {
@@ -24,4 +33,7 @@ const playlistSchema = new Schema(
     { timestamps: true },
 );
 
-export const Playlist = mongoose.model("Playlist", playlistSchema);
+export const Playlist = mongoose.model<playlistDocument>(
+    "Playlist",
+    playlistSchema,
+);
