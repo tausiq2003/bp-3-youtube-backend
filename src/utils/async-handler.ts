@@ -1,11 +1,11 @@
-import type { NextFunction } from "express";
-import type { AuthenticatedRequest } from "../types/usertype";
+import type { NextFunction, Response } from "express";
+import type { AuthenticatedRequest } from "../types/usertype.ts";
 
 type RequestHandlerWithAuth = (
     req: AuthenticatedRequest,
     res: Response,
     next: NextFunction,
-) => Promise<void> | void;
+) => Promise<unknown> | void;
 
 function asyncHandler(requestHandler: RequestHandlerWithAuth) {
     return function (

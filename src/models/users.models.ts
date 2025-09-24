@@ -1,7 +1,21 @@
 import mongoose, { Schema } from "mongoose";
-import jwt from "jsonwebtoken";
+import jwt, { type SignOptions } from "jsonwebtoken";
 import bcrypt from "bcrypt";
 
+interface UserDocument extends Document {
+    _id: Schema.Types.ObjectId;
+    username: string;
+    email: string;
+    fullName: string;
+    avatar: string;
+    coverImage?: string;
+    watchHistory: mongoose.Types.ObjectId[];
+    password: string;
+    refreshToken?: string;
+    isPasswordCorrect(password: string): Promise<boolean>;
+    generateAccessToken(): string;
+    generateRefreshToken(): string;
+}
 const userSchema = new Schema(
     {
         username: {
@@ -70,10 +84,10 @@ userSchema.methods.generateAccessToken = function () {
             username: this.username,
             fullName: this.fullName,
         },
-        process.env.ACCESS_TOKEN_SECRET,
+        process.env.ACCESS_TOKEN_SECRET! as string,
         {
-            expiresIn: process.env.ACCESS_TOKEN_EXPIRY,
-        },
+            expiresIn: process.env.ACCESS_TOKEN_EXPIRY!,
+        } as SignOptions,
     );
 };
 userSchema.methods.generateRefreshToken = function () {
@@ -81,11 +95,11 @@ userSchema.methods.generateRefreshToken = function () {
         {
             _id: this._id,
         },
-        process.env.REFRESH_TOKEN_SECRET,
+        process.env.REFRESH_TOKEN_SECRET! as string,
         {
-            expiresIn: process.env.REFRESH_TOKEN_EXPIRY,
-        },
+            expiresIn: process.env.REFRESH_TOKEN_EXPIRY!,
+        } as SignOptions,
     );
 };
 
-export const User = mongoose.model("User", userSchema);
+export const User = mongoose.model<UserDocument>("User", userSchema);

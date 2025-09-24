@@ -4,11 +4,22 @@ import { User } from "../models/users.models";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import ApiResponse from "../utils/api-response";
 import jwt from "jsonwebtoken";
-import mongoose from "mongoose";
+import mongoose, { Schema } from "mongoose";
+import {
+    changePasswordValidator,
+    loginValidator,
+    registerValidator,
+    updateAccountValidator,
+} from "../validators/users.validators";
 
-const generateAccessAndRefereshTokens = async (userId: string) => {
+const generateAccessAndRefereshTokens = async (
+    userId: Schema.Types.ObjectId,
+) => {
     try {
         const user = await User.findById(userId);
+        if (!user) {
+            throw new ApiError(401, "Unauthorized request");
+        }
         const accessToken = user.generateAccessToken();
         const refreshToken = user.generateRefreshToken();
 
@@ -35,17 +46,23 @@ const registerUser = asyncHandler(async (req, res) => {
     // remove password and refresh token field from response
     // check for user creation
     // return res
+    const validationResult = await registerValidator.safeParseAsync(req.body);
 
-    const { fullName, email, username, password } = req.body;
-    //console.log("email: ", email);
-
-    if (
-        [fullName, email, username, password].some(
-            (field) => field?.trim() === "",
-        )
-    ) {
-        throw new ApiError(400, "All fields are required");
+    if (!validationResult.success) {
+        const prettyErrors = validationResult.error.issues.map((issue) => ({
+            field: issue.path.join("."),
+            message: issue.message,
+            code: issue.code,
+        }));
+        const errorMessages = prettyErrors.map(
+            (error) => `${error.field}: ${error.message} (Code: ${error.code})`,
+        );
+        throw new ApiError(400, "Validation failed", errorMessages);
     }
+    const validationData = validationResult.data;
+
+    const { fullName, email, username, password } = validationData;
+    //console.log("email: ", email);
 
     const existedUser = await User.findOne({
         $or: [{ username }, { email }],
@@ -114,12 +131,22 @@ const loginUser = asyncHandler(async (req, res) => {
     //access and referesh token
     //send cookie
 
-    const { email, username, password } = req.body;
-    console.log(email);
+    const validationResult = await loginValidator.safeParseAsync(req.body);
 
-    if (!username && !email) {
-        throw new ApiError(400, "username or email is required");
+    if (!validationResult.success) {
+        const prettyErrors = validationResult.error.issues.map((issue) => ({
+            field: issue.path.join("."),
+            message: issue.message,
+            code: issue.code,
+        }));
+        const errorMessages = prettyErrors.map(
+            (error) => `${error.field}: ${error.message} (Code: ${error.code})`,
+        );
+        throw new ApiError(400, "Validation failed", errorMessages);
     }
+    const validationData = validationResult.data;
+
+    const { email, username, password } = validationData;
 
     // Here is an alternative of above code based on logic discussed in video:
     // if (!(username || email)) {
@@ -152,6 +179,7 @@ const loginUser = asyncHandler(async (req, res) => {
     const options = {
         httpOnly: true,
         secure: true,
+        sameSite: "strict" as const,
     };
 
     return res
@@ -172,6 +200,9 @@ const loginUser = asyncHandler(async (req, res) => {
 });
 
 const logoutUser = asyncHandler(async (req, res) => {
+    if (!req.user?._id) {
+        throw new ApiError(401, "Unauthorized request");
+    }
     await User.findByIdAndUpdate(
         req.user._id,
         {
@@ -187,6 +218,7 @@ const logoutUser = asyncHandler(async (req, res) => {
     const options = {
         httpOnly: true,
         secure: true,
+        sameSite: "strict" as const,
     };
 
     return res
@@ -207,7 +239,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
     try {
         const decodedToken = jwt.verify(
             incomingRefreshToken,
-            process.env.REFRESH_TOKEN_SECRET,
+            process.env.REFRESH_TOKEN_SECRET! as string,
         );
 
         const user = await User.findById(decodedToken?._id);
@@ -223,10 +255,12 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
         const options = {
             httpOnly: true,
             secure: true,
+            sameSite: "strict" as const,
         };
 
-        const { accessToken, newRefreshToken } =
+        const { accessToken, refreshToken } =
             await generateAccessAndRefereshTokens(user._id);
+        const newRefreshToken = refreshToken;
 
         return res
             .status(200)
@@ -240,12 +274,32 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
                 ),
             );
     } catch (error) {
-        throw new ApiError(401, error?.message || "Invalid refresh token");
+        throw new ApiError(
+            401,
+            (error as Error)?.message || "Invalid refresh token",
+        );
     }
 });
 
 const changeCurrentPassword = asyncHandler(async (req, res) => {
-    const { oldPassword, newPassword } = req.body;
+    const validationResult = await changePasswordValidator.safeParseAsync(
+        req.body,
+    );
+
+    if (!validationResult.success) {
+        const prettyErrors = validationResult.error.issues.map((issue) => ({
+            field: issue.path.join("."),
+            message: issue.message,
+            code: issue.code,
+        }));
+        const errorMessages = prettyErrors.map(
+            (error) => `${error.field}: ${error.message} (Code: ${error.code})`,
+        );
+        throw new ApiError(400, "Validation failed", errorMessages);
+    }
+    const validationData = validationResult.data;
+
+    const { oldPassword, newPassword } = validationData;
 
     const user = await User.findById(req.user?._id);
     const isPasswordCorrect = await user.isPasswordCorrect(oldPassword);
@@ -269,8 +323,24 @@ const getCurrentUser = asyncHandler(async (req, res) => {
 });
 
 const updateAccountDetails = asyncHandler(async (req, res) => {
-    const { fullName, email } = req.body;
+    const validationResult = await updateAccountValidator.safeParseAsync(
+        req.body,
+    );
 
+    if (!validationResult.success) {
+        const prettyErrors = validationResult.error.issues.map((issue) => ({
+            field: issue.path.join("."),
+            message: issue.message,
+            code: issue.code,
+        }));
+        const errorMessages = prettyErrors.map(
+            (error) => `${error.field}: ${error.message} (Code: ${error.code})`,
+        );
+        throw new ApiError(400, "Validation failed", errorMessages);
+    }
+    const validationData = validationResult.data;
+
+    const { fullName, email } = validationData;
     if (!fullName || !email) {
         throw new ApiError(400, "All fields are required");
     }

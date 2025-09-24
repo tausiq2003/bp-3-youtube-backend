@@ -4,8 +4,8 @@ import {
     toggleCommentLike,
     toggleVideoLike,
     toggleTweetLike,
-} from "../controllers/like.controller";
-import { verifyJWT } from "../middlewares/auth.middleware";
+} from "../controllers/like.controllers";
+import { verifyJWT } from "../middlewares/auth.middlewares";
 
 const router = Router();
 router.use(verifyJWT); // Apply verifyJWT middleware to all routes in this file
