@@ -1,16 +1,16 @@
 {
   "name": "youtube-backend",
   "version": "1.0.0",
-  "description": "This is a backend project focused on url shortener",
+  "description": "This is a backend project focused to build similar to youtube",
   "keywords": [
     "backend",
     "typescript",
     "mongodb",
     "crud"
   ],
-  "homepage": "https://github.com/tausiq2003/bp-1-youtube-backend#readme",
+  "homepage": "https://github.com/tausiq2003/bp-3-youtube-backend#readme",
   "bugs": {
-    "url": "https://github.com/tausiq2003/bp-1-youtube-backend/issues"
+    "url": "https://github.com/tausiq2003/bp-3-youtube-backend/issues"
   },
   "repository": {
     "type": "git",
