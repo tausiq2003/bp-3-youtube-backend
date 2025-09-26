@@ -1,5 +1,5 @@
 import type { NextFunction, Response } from "express";
-import type { AuthenticatedRequest } from "../types/usertype.ts";
+import type { AuthenticatedRequest } from "../types/usertype";
 
 type RequestHandlerWithAuth = (
     req: AuthenticatedRequest,

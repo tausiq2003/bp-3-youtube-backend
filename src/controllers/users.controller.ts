@@ -11,6 +11,12 @@ import {
     registerValidator,
     updateAccountValidator,
 } from "../validators/users.validators";
+import validatePayload from "../utils/validation";
+import { refreshTokenJwt } from "../validators/token.validators";
+
+interface MulterFiles {
+    [fieldname: string]: Express.Multer.File[];
+}
 
 const generateAccessAndRefereshTokens = async (
     userId: Schema.Types.ObjectId,
@@ -46,20 +52,7 @@ const registerUser = asyncHandler(async (req, res) => {
     // remove password and refresh token field from response
     // check for user creation
     // return res
-    const validationResult = await registerValidator.safeParseAsync(req.body);
-
-    if (!validationResult.success) {
-        const prettyErrors = validationResult.error.issues.map((issue) => ({
-            field: issue.path.join("."),
-            message: issue.message,
-            code: issue.code,
-        }));
-        const errorMessages = prettyErrors.map(
-            (error) => `${error.field}: ${error.message} (Code: ${error.code})`,
-        );
-        throw new ApiError(400, "Validation failed", errorMessages);
-    }
-    const validationData = validationResult.data;
+    const validationData = await validatePayload(registerValidator, req.body);
 
     const { fullName, email, username, password } = validationData;
     //console.log("email: ", email);
@@ -73,16 +66,14 @@ const registerUser = asyncHandler(async (req, res) => {
     }
     //console.log(req.files);
 
-    const avatarLocalPath = req.files?.avatar[0]?.path;
+    const files = req.files as MulterFiles;
+
+    const avatarLocalPath = files?.avatar?.[0]?.path;
     //const coverImageLocalPath = req.files?.coverImage[0]?.path;
 
-    let coverImageLocalPath;
-    if (
-        req.files &&
-        Array.isArray(req.files.coverImage) &&
-        req.files.coverImage.length > 0
-    ) {
-        coverImageLocalPath = req.files.coverImage[0].path;
+    let coverImageLocalPath: string | undefined;
+    if (files?.coverImage && files.coverImage.length > 0) {
+        coverImageLocalPath = files.coverImage[0]?.path;
     }
 
     if (!avatarLocalPath) {
@@ -90,7 +81,9 @@ const registerUser = asyncHandler(async (req, res) => {
     }
 
     const avatar = await uploadOnCloudinary(avatarLocalPath);
-    const coverImage = await uploadOnCloudinary(coverImageLocalPath);
+    const coverImage = coverImageLocalPath
+        ? await uploadOnCloudinary(coverImageLocalPath)
+        : null;
 
     if (!avatar) {
         throw new ApiError(400, "Avatar file is required");
@@ -130,21 +123,7 @@ const loginUser = asyncHandler(async (req, res) => {
     //password check
     //access and referesh token
     //send cookie
-
-    const validationResult = await loginValidator.safeParseAsync(req.body);
-
-    if (!validationResult.success) {
-        const prettyErrors = validationResult.error.issues.map((issue) => ({
-            field: issue.path.join("."),
-            message: issue.message,
-            code: issue.code,
-        }));
-        const errorMessages = prettyErrors.map(
-            (error) => `${error.field}: ${error.message} (Code: ${error.code})`,
-        );
-        throw new ApiError(400, "Validation failed", errorMessages);
-    }
-    const validationData = validationResult.data;
+    const validationData = await validatePayload(loginValidator, req.body);
 
     const { email, username, password } = validationData;
 
@@ -241,8 +220,12 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
             incomingRefreshToken,
             process.env.REFRESH_TOKEN_SECRET! as string,
         );
+        const validatedToken = await validatePayload(
+            refreshTokenJwt,
+            decodedToken,
+        );
 
-        const user = await User.findById(decodedToken?._id);
+        const user = await User.findById(validatedToken._id);
 
         if (!user) {
             throw new ApiError(401, "Invalid refresh token");
@@ -282,26 +265,17 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
 });
 
 const changeCurrentPassword = asyncHandler(async (req, res) => {
-    const validationResult = await changePasswordValidator.safeParseAsync(
+    const validationData = await validatePayload(
+        changePasswordValidator,
         req.body,
     );
-
-    if (!validationResult.success) {
-        const prettyErrors = validationResult.error.issues.map((issue) => ({
-            field: issue.path.join("."),
-            message: issue.message,
-            code: issue.code,
-        }));
-        const errorMessages = prettyErrors.map(
-            (error) => `${error.field}: ${error.message} (Code: ${error.code})`,
-        );
-        throw new ApiError(400, "Validation failed", errorMessages);
-    }
-    const validationData = validationResult.data;
 
     const { oldPassword, newPassword } = validationData;
 
     const user = await User.findById(req.user?._id);
+    if (!user) {
+        throw new ApiError(404, "User not found");
+    }
     const isPasswordCorrect = await user.isPasswordCorrect(oldPassword);
 
     if (!isPasswordCorrect) {
@@ -323,22 +297,10 @@ const getCurrentUser = asyncHandler(async (req, res) => {
 });
 
 const updateAccountDetails = asyncHandler(async (req, res) => {
-    const validationResult = await updateAccountValidator.safeParseAsync(
+    const validationData = await validatePayload(
+        updateAccountValidator,
         req.body,
     );
-
-    if (!validationResult.success) {
-        const prettyErrors = validationResult.error.issues.map((issue) => ({
-            field: issue.path.join("."),
-            message: issue.message,
-            code: issue.code,
-        }));
-        const errorMessages = prettyErrors.map(
-            (error) => `${error.field}: ${error.message} (Code: ${error.code})`,
-        );
-        throw new ApiError(400, "Validation failed", errorMessages);
-    }
-    const validationData = validationResult.data;
 
     const { fullName, email } = validationData;
     if (!fullName || !email) {
@@ -374,7 +336,7 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
 
     const avatar = await uploadOnCloudinary(avatarLocalPath);
 
-    if (!avatar.url) {
+    if (!avatar?.url) {
         throw new ApiError(400, "Error while uploading on avatar");
     }
 
@@ -404,7 +366,7 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
 
     const coverImage = await uploadOnCloudinary(coverImageLocalPath);
 
-    if (!coverImage.url) {
+    if (!coverImage?.url) {
         throw new ApiError(400, "Error while uploading on avatar");
     }
 
@@ -502,7 +464,7 @@ const getWatchHistory = asyncHandler(async (req, res) => {
     const user = await User.aggregate([
         {
             $match: {
-                _id: new mongoose.Types.ObjectId(req.user._id),
+                _id: new mongoose.Types.ObjectId(`${req.user?._id}`),
             },
         },
         {

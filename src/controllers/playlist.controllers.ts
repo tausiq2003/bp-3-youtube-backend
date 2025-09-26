@@ -4,26 +4,16 @@ import ApiError from "../utils/api-error";
 import ApiResponse from "../utils/api-response";
 import asyncHandler from "../utils/async-handler";
 import { playlistCreateValidator } from "../validators/playlist.validators";
+import validatePayload from "../utils/validation";
+import { Video } from "../models/video.models";
 
 const createPlaylist = asyncHandler(async (req, res) => {
     //TODO: create playlist
 
-    const validationResult = await playlistCreateValidator.safeParseAsync(
+    const validationData = await validatePayload(
+        playlistCreateValidator,
         req.body,
     );
-
-    if (!validationResult.success) {
-        const prettyErrors = validationResult.error.issues.map((issue) => ({
-            field: issue.path.join("."),
-            message: issue.message,
-            code: issue.code,
-        }));
-        const errorMessages = prettyErrors.map(
-            (error) => `${error.field}: ${error.message} (Code: ${error.code})`,
-        );
-        throw new ApiError(400, "Validation failed", errorMessages);
-    }
-    const validationData = validationResult.data;
     const { name, description } = validationData;
     const playlist = await Playlist.create({
         name: name,
@@ -45,7 +35,7 @@ const getUserPlaylists = asyncHandler(async (req, res) => {
     if (!isValidObjectId(userId)) {
         throw new ApiError(400, "user id is not valid");
     }
-    const userPlaylists = await Playlist.find({ owner: req.user?._id });
+    const userPlaylists = await Playlist.find({ owner: userId });
     return res
         .status(200)
         .json(
@@ -63,7 +53,7 @@ const getPlaylistById = asyncHandler(async (req, res) => {
     if (!isValidObjectId(playlistId)) {
         throw new ApiError(400, "playlist id is not valid");
     }
-    const playlist = await Playlist.find({ _id: playlistId });
+    const playlist = await Playlist.findById(playlistId).populate("videos");
     if (!playlist) {
         throw new ApiError(404, "No playlist found");
     }
@@ -82,7 +72,7 @@ const addVideoToPlaylist = asyncHandler(async (req, res) => {
     }
 
     const playlist = await Playlist.findOne({ _id: playlistId });
-    const video = await Playlist.findOne({ _id: videoId });
+    const video = await Video.findOne({ _id: videoId });
     if (!playlist) {
         throw new ApiError(404, "Playlist not found");
     }
@@ -90,7 +80,7 @@ const addVideoToPlaylist = asyncHandler(async (req, res) => {
         throw new ApiError(404, "Video not found");
     }
     const existingVideo = playlist.videos.find((vId) => vId.equals(videoId));
-    if (existingVideo === videoId) {
+    if (existingVideo) {
         throw new ApiError(400, "You have the video already in the playlist");
     }
     playlist.videos.push(videoId as unknown as ObjectId);
@@ -100,7 +90,7 @@ const addVideoToPlaylist = asyncHandler(async (req, res) => {
         .json(
             new ApiResponse(
                 201,
-                {},
+                playlist,
                 `Video saved to playlist ${playlist.name}`,
             ),
         );
@@ -127,10 +117,10 @@ const removeVideoFromPlaylist = asyncHandler(async (req, res) => {
     playlist.videos.pull(videoId);
     await playlist.save();
     return res
-        .status(201)
+        .status(200)
         .json(
             new ApiResponse(
-                201,
+                200,
                 {},
                 `Video removed from playlist ${playlist.name}`,
             ),
@@ -159,7 +149,9 @@ const deletePlaylist = asyncHandler(async (req, res) => {
     }
     return res
         .status(200)
-        .json(new ApiResponse(200, deletedRes, "Tweet deleted successfully"));
+        .json(
+            new ApiResponse(200, deletedRes, "Playlist deleted successfully"),
+        );
 });
 
 const updatePlaylist = asyncHandler(async (req, res) => {
@@ -168,25 +160,14 @@ const updatePlaylist = asyncHandler(async (req, res) => {
     if (!isValidObjectId(playlistId)) {
         throw new ApiError(400, "playlist id is not valid");
     }
-    const validationResult = await playlistCreateValidator.safeParseAsync(
-        req.body,
-    );
     const userId = req.user?._id;
     if (!isValidObjectId(userId)) {
         throw new ApiError(401, "Unauthorized");
     }
-    if (!validationResult.success) {
-        const prettyErrors = validationResult.error.issues.map((issue) => ({
-            field: issue.path.join("."),
-            message: issue.message,
-            code: issue.code,
-        }));
-        const errorMessages = prettyErrors.map(
-            (error) => `${error.field}: ${error.message} (Code: ${error.code})`,
-        );
-        throw new ApiError(400, "Validation failed", errorMessages);
-    }
-    const validationData = validationResult.data;
+    const validationData = await validatePayload(
+        playlistCreateValidator,
+        req.body,
+    );
     const { name, description } = validationData;
     const updateRes = await Playlist.findOneAndUpdate(
         { owner: userId, _id: playlistId },

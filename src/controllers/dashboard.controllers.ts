@@ -8,16 +8,22 @@ const getChannelStats = asyncHandler(async (req, res) => {
     // TODO: Get the channel stats like total video views, total subscribers, total videos, total likes etc.
     //total video views of me, total subscribers of me, total videos of me, total likes of me, ok
     //total video views of me
-    const totalViews = await Video.aggregate([
+    const totalViewsResult = await Video.aggregate([
         {
             $match: {
                 owner: req.user?._id,
             },
         },
         {
-            $sum: "$views",
+            $group: {
+                _id: null,
+                totalViews: {
+                    $sum: "$views",
+                },
+            },
         },
     ]);
+    const totalViews = totalViewsResult[0]?.totalViews || 0;
 
     // total subscribers of me
     const totalSubs = await Subscription.countDocuments({

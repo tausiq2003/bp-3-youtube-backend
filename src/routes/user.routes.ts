@@ -11,9 +11,9 @@ import {
     getUserChannelProfile,
     getWatchHistory,
     updateAccountDetails,
-} from "../controllers/user.controller";
-import { upload } from "../middlewares/multer.middleware";
-import { verifyJWT } from "../middlewares/auth.middleware";
+} from "../controllers/users.controller";
+import { upload } from "../middlewares/multer.middlewares";
+import { verifyJWT } from "../middlewares/auth.middlewares";
 
 const router = Router();
 

@@ -21,7 +21,7 @@ app.use(cookieParser());
 //routes import
 import userRouter from "./routes/user.routes";
 import healthcheckRouter from "./routes/healthcheck.routes";
-import tweetRouter from "./routes/tweet.routes";
+import tweetRouter from "./routes/tweets.routes";
 import subscriptionRouter from "./routes/subscription.routes";
 import videoRouter from "./routes/video.routes";
 import commentRouter from "./routes/comment.routes";

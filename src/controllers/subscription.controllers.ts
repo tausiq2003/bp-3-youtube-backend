@@ -1,9 +1,27 @@
-import mongoose, { isValidObjectId } from "mongoose";
+import { isValidObjectId } from "mongoose";
 import { User } from "../models/users.models";
 import { Subscription } from "../models/subscription.models";
 import ApiError from "../utils/api-error";
 import ApiResponse from "../utils/api-response";
 import asyncHandler from "../utils/async-handler";
+
+interface PopulatedUser {
+    _id: string;
+    username: string;
+    firstname: string;
+}
+
+interface SubscriptionWithSubscriber {
+    _id: string;
+    subscriber: PopulatedUser;
+    channel: string;
+}
+
+interface SubscriptionWithChannel {
+    _id: string;
+    subscriber: string;
+    channel: PopulatedUser;
+}
 
 const toggleSubscription = asyncHandler(async (req, res) => {
     const { channelId } = req.params;
@@ -11,7 +29,7 @@ const toggleSubscription = asyncHandler(async (req, res) => {
     if (!isValidObjectId(channelId)) {
         throw new ApiError(400, "Channel id is not valid");
     }
-    if (channelId === req.user?._id) {
+    if (channelId === req.user?._id.toString()) {
         throw new ApiError(400, "User cannot subscribe it own channel");
     }
     //subscriber is me, channel is them
@@ -51,7 +69,7 @@ const toggleSubscription = asyncHandler(async (req, res) => {
     }
     return res
         .status(200)
-        .json(new ApiResponse(200, deleteSub, "Deleted successfully"));
+        .json(new ApiResponse(200, deleteSub, "Unsubscribed successfully"));
 });
 
 // controller to return subscriber list of a channel
@@ -63,28 +81,31 @@ const getUserChannelSubscribers = asyncHandler(async (req, res) => {
         throw new ApiError(400, "channel Id is not valid");
     }
     //this will get all the documents with channelId
-    const result = await Subscription.find({ channel: channelId }).populate(
-        "subscriber",
-    );
+    const result = await Subscription.find({ channel: channelId })
+        .populate("subscriber", "username firstname")
+        .lean();
     //{_id, _subscriber: username, firstname, channel}
-    const resultSub = [{ channel: channelId }];
-    resultSub.push(
-        result.map((sub) => {
-            return {
-                username: sub.subscriber.username,
-                firstName: sub.subscriber.firstname,
-            };
+    const resultSub = (result as unknown as SubscriptionWithSubscriber[]).map(
+        (sub) => ({
+            id: sub.subscriber._id,
+            username: sub.subscriber.username,
+            firstName: sub.subscriber.firstname,
         }),
     );
+    const response = {
+        channelId,
+        totalSubs: resultSub.length,
+        subscribers: resultSub,
+    };
     return res
         .status(200)
         .json(
             new ApiResponse(
                 200,
-                resultSub,
-                result.length === 0
+                response,
+                resultSub.length === 0
                     ? "No subscribers found"
-                    : `Found ${result.length} subscribers`,
+                    : `Found ${resultSub.length} subscribers`,
             ),
         );
 });
@@ -98,25 +119,31 @@ const getSubscribedChannels = asyncHandler(async (req, res) => {
     }
     const result = await Subscription.find({
         subscriber: subscriberId,
-    }).populate("channel");
-    const resultSub = [{ user: subscriberId }];
-    resultSub.push(
-        result.map((sub) => {
-            return {
-                username: sub.channel.username,
-                firstName: sub.channel.firstname,
-            };
+    })
+        .populate("channel", "username firstname")
+        .lean();
+
+    const resultSub = (result as unknown as SubscriptionWithChannel[]).map(
+        (sub) => ({
+            id: sub.channel._id,
+            username: sub.channel.username,
+            firstName: sub.channel.firstname,
         }),
     );
+    const response = {
+        subscriberId,
+        totalSubs: resultSub.length,
+        channels: resultSub,
+    };
     return res
         .status(200)
         .json(
             new ApiResponse(
                 200,
-                resultSub,
-                result.length === 0
+                response,
+                resultSub.length === 0
                     ? "No channels found"
-                    : `Found ${result.length} subscribers`,
+                    : `Found ${resultSub.length} subscriptions`,
             ),
         );
 });
