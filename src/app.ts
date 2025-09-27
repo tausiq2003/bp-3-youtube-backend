@@ -1,4 +1,4 @@
-import express from "express";
+import express, { type Response } from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 
@@ -28,6 +28,8 @@ import commentRouter from "./routes/comment.routes";
 import likeRouter from "./routes/like.routes";
 import playlistRouter from "./routes/playlist.routes";
 import dashboardRouter from "./routes/dashboard.routes";
+import type { AuthenticatedRequest } from "./types/usertype";
+import ApiError from "./utils/api-error";
 
 //routes declaration
 app.use("/api/v1/healthcheck", healthcheckRouter);
@@ -42,4 +44,24 @@ app.use("/api/v1/dashboard", dashboardRouter);
 
 // http://localhost:8000/api/v1/users/register
 
+app.use((err: Error, _req: AuthenticatedRequest, res: Response) => {
+    let error = err;
+    if (!(error instanceof ApiError)) {
+        const errorWithStatus = error as Error & { statusCode?: number };
+        const statusCode = errorWithStatus.statusCode || 500;
+        const message = error.message || "Something went wrong";
+        error = new ApiError(statusCode, message, [], err.stack);
+    }
+
+    const apiError = error as ApiError<unknown>;
+
+    return res.status(apiError.statusCode).json({
+        success: false,
+        message: error.message,
+        errors: apiError.errors,
+        ...(process.env.NODE_ENV === "development" && {
+            stack: error.stack,
+        }),
+    });
+});
 export default app;

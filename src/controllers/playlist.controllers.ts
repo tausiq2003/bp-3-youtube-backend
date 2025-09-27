@@ -14,6 +14,9 @@ const createPlaylist = asyncHandler(async (req, res) => {
         playlistCreateValidator,
         req.body,
     );
+    if ("error" in validationData) {
+        throw new ApiError(400, "Validation failed", validationData.error);
+    }
     const { name, description } = validationData;
     const playlist = await Playlist.create({
         name: name,
@@ -168,6 +171,9 @@ const updatePlaylist = asyncHandler(async (req, res) => {
         playlistCreateValidator,
         req.body,
     );
+    if ("error" in validationData) {
+        throw new ApiError(400, "Validation failed", validationData.error);
+    }
     const { name, description } = validationData;
     const updateRes = await Playlist.findOneAndUpdate(
         { owner: userId, _id: playlistId },

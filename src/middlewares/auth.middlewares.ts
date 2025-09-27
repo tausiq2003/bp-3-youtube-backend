@@ -1,10 +1,8 @@
 import ApiError from "../utils/api-error";
 import asyncHandler from "../utils/async-handler";
-import jwt from "jsonwebtoken";
+import jwt, { type JwtPayload } from "jsonwebtoken";
 import { User } from "../models/users.models";
 import type { AuthenticatedRequest } from "../types/usertype";
-import validatePayload from "../utils/validation";
-import { accessTokenJwt } from "../validators/token.validators";
 
 export const verifyJWT = asyncHandler(
     async (req: AuthenticatedRequest, _, next) => {
@@ -21,14 +19,8 @@ export const verifyJWT = asyncHandler(
             const decodedToken = jwt.verify(
                 token,
                 process.env.ACCESS_TOKEN_SECRET! as string,
-            );
-
-            const validatedToken = await validatePayload(
-                accessTokenJwt,
-                decodedToken,
-            );
-
-            const user = await User.findById(validatedToken._id).select(
+            ) as JwtPayload;
+            const user = await User.findById(decodedToken._id).select(
                 "-password -refreshToken",
             );
 

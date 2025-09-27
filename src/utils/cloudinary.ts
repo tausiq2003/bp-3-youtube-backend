@@ -2,9 +2,9 @@ import { v2 as cloudinary } from "cloudinary";
 import fs from "fs";
 
 cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME! as string,
-    api_key: process.env.CLOUDINARY_API_KEY! as string,
-    api_secret: process.env.CLOUDINARY_API_SECRET! as string,
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME!,
+    api_key: process.env.CLOUDINARY_API_KEY!,
+    api_secret: process.env.CLOUDINARY_API_SECRET!,
 });
 
 const uploadOnCloudinary = async (localFilePath: string | undefined) => {
@@ -41,8 +41,29 @@ const uploadOnCloudinary = async (localFilePath: string | undefined) => {
         return null;
     }
 };
-// const deletedFromCloudinary = async function () {
-// //TODO
-// };
+export const deleteFromCloudinary = async function (
+    url: string,
+    resourceType: "image" | "video" = "image",
+) {
+    try {
+        const urlPart = url.split("/").pop();
+        if (!urlPart) {
+            throw new Error("Invalid URL format");
+        }
 
+        const publicId = urlPart.split(".")[0];
+        if (!publicId) {
+            throw new Error("Could not extract public ID from URL");
+        }
+
+        const result = await cloudinary.uploader.destroy(publicId, {
+            resource_type: resourceType,
+        });
+
+        return result;
+    } catch (error) {
+        console.error("Cloudinary deletion failed:", (error as Error)?.message);
+        return null;
+    }
+};
 export { uploadOnCloudinary };

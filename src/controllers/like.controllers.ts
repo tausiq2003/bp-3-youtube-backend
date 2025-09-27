@@ -134,8 +134,9 @@ const getLikedVideos = asyncHandler(async (req, res) => {
     }
     const likes = await Like.find({
         likedBy: userId,
-        videos: { $exists: true },
+        video: { $exists: true },
     });
+    console.log(userId);
     return res
         .status(200)
         .json(

@@ -3,7 +3,10 @@ import { Video } from "../models/video.models";
 import ApiError from "../utils/api-error";
 import ApiResponse from "../utils/api-response";
 import asyncHandler from "../utils/async-handler";
-import { uploadOnCloudinary } from "../utils/cloudinary.js";
+import {
+    deleteFromCloudinary,
+    uploadOnCloudinary,
+} from "../utils/cloudinary.js";
 import { publishVideoValidator } from "../validators/videos.validators";
 import validatePayload from "../utils/validation";
 
@@ -17,7 +20,12 @@ const getAllVideos = asyncHandler(async (req, res) => {
         userId,
     } = req.query;
     //TODO: get all videos based on query, sort, pagination
-    const matchConditions: any = { isPublished: true };
+    interface MatchConditions {
+        isPublished: boolean;
+        $or?: Array<{ [key: string]: { $regex: string; $options: string } }>;
+        owner?: string;
+    }
+    const matchConditions: MatchConditions = { isPublished: true };
 
     if (query && typeof query === "string") {
         matchConditions.$or = [
@@ -26,10 +34,14 @@ const getAllVideos = asyncHandler(async (req, res) => {
         ];
     }
 
-    if (userId && isValidObjectId(userId)) {
+    if (userId && typeof userId === "string" && isValidObjectId(userId)) {
         matchConditions.owner = userId;
     }
-    const sortOptions: any = {};
+    interface SortOptions {
+        [key: string]: 1 | -1;
+    }
+
+    const sortOptions: SortOptions = {};
     if (typeof sortBy === "string") {
         sortOptions[sortBy] = sortType === "asc" ? 1 : -1;
     }
@@ -90,7 +102,11 @@ const publishAVideo = asyncHandler(async (req, res) => {
         publishVideoValidator,
         req.body,
     );
+    if ("error" in validationData) {
+        throw new ApiError(400, "Validation failed", validationData.error);
+    }
     const { title, description } = validationData;
+    console.log(title);
 
     if (!req.files || Array.isArray(req.files)) {
         throw new ApiError(400, "Files missing");
@@ -102,14 +118,17 @@ const publishAVideo = asyncHandler(async (req, res) => {
     if (!files.thumbnail?.[0].mimetype.startsWith("image/")) {
         throw new ApiError(400, "Uploaded file is not an image");
     }
-    if (!files.video?.[0]) {
+    if (!files.videoFile?.[0]) {
         throw new ApiError(400, "Video is required");
     }
-    if (!files.video?.[0].mimetype.startsWith("video/")) {
+    if (!files.videoFile?.[0].mimetype.startsWith("video/")) {
         throw new ApiError(400, "Uploaded file is not a video");
     }
+    console.log("hey");
+    console.log(files.videoFile?.[0].path);
+    console.log(files.thumbnail?.[0].path);
 
-    const videoUrl = await uploadOnCloudinary(files.video?.[0].path);
+    const videoUrl = await uploadOnCloudinary(files.videoFile?.[0].path);
     const thumbnailUrl = await uploadOnCloudinary(files.thumbnail?.[0].path);
     if (!(videoUrl?.url && thumbnailUrl?.url)) {
         throw new ApiError(500, "video url or thumbnail url not found");
@@ -117,8 +136,8 @@ const publishAVideo = asyncHandler(async (req, res) => {
     const video = await Video.create({
         title: title,
         description: description,
-        video: videoUrl.url,
-        thumbnailUrl: thumbnailUrl.url,
+        videoFile: videoUrl.url,
+        thumbnail: thumbnailUrl.url,
         duration: videoUrl?.duration || 0,
         owner: req.user?._id,
         isPublished: false,
@@ -165,11 +184,20 @@ const updateVideo = asyncHandler(async (req, res) => {
         publishVideoValidator,
         req.body,
     );
+    if ("error" in validationData) {
+        throw new ApiError(400, "Validation failed", validationData.error);
+    }
     const { title, description } = validationData;
+
+    const videoRes = await Video.findById(videoId);
+    if (!videoRes) {
+        throw new ApiError(404, "Video not found");
+    }
+    const urlPath = videoRes.thumbnail;
 
     let thumbnailUrl;
     if (req.file) {
-        if (!req.file.mimetype.startsWith("/image")) {
+        if (!req.file.mimetype.startsWith("image/")) {
             throw new ApiError(400, "Uploaded file is not an image");
         }
         const uploadResult = await uploadOnCloudinary(req.file.path);
@@ -178,7 +206,12 @@ const updateVideo = asyncHandler(async (req, res) => {
         }
         thumbnailUrl = uploadResult.url;
     }
-    const updateData: any = { title, description };
+    interface UpdateData {
+        title: string;
+        description: string;
+        thumbnail?: string;
+    }
+    const updateData: UpdateData = { title, description };
     if (thumbnailUrl) {
         updateData.thumbnail = thumbnailUrl;
     }
@@ -195,6 +228,8 @@ const updateVideo = asyncHandler(async (req, res) => {
             "Video not found or you don't have permission to update it",
         );
     }
+    const result = await deleteFromCloudinary(urlPath, "image");
+    console.log(result);
 
     return res
         .status(200)
@@ -211,6 +246,12 @@ const deleteVideo = asyncHandler(async (req, res) => {
     if (!isValidObjectId(videoId)) {
         throw new ApiError(400, "video id is not valid");
     }
+    const videoRes = await Video.findById(videoId);
+    if (!videoRes) {
+        throw new ApiError(404, "video not found");
+    }
+    const videoUrl = videoRes.videoFile;
+    const thumbnailUrl = videoRes.thumbnail;
     const deleteRes = await Video.deleteOne({ _id: videoId, owner: userId });
     //should i delete from playlist
     if (deleteRes.deletedCount === 0) {
@@ -219,9 +260,17 @@ const deleteVideo = asyncHandler(async (req, res) => {
             "Video not found or already deleted earlier or you are not authorized to delete it",
         );
     }
+    const result = await deleteFromCloudinary(thumbnailUrl, "image");
+    const resultV = await deleteFromCloudinary(videoUrl, "video");
     return res
         .status(200)
-        .json(new ApiResponse(200, deleteRes, "Video deleted successfully"));
+        .json(
+            new ApiResponse(
+                200,
+                { deleteRes, result, resultV },
+                "Video deleted successfully",
+            ),
+        );
 });
 
 const togglePublishStatus = asyncHandler(async (req, res) => {

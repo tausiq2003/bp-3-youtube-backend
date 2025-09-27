@@ -1,9 +1,12 @@
 import asyncHandler from "../utils/async-handler";
 import ApiError from "../utils/api-error";
 import { User } from "../models/users.models";
-import { uploadOnCloudinary } from "../utils/cloudinary.js";
+import {
+    deleteFromCloudinary,
+    uploadOnCloudinary,
+} from "../utils/cloudinary.js";
 import ApiResponse from "../utils/api-response";
-import jwt from "jsonwebtoken";
+import jwt, { type JwtPayload } from "jsonwebtoken";
 import mongoose, { Schema } from "mongoose";
 import {
     changePasswordValidator,
@@ -12,7 +15,6 @@ import {
     updateAccountValidator,
 } from "../validators/users.validators";
 import validatePayload from "../utils/validation";
-import { refreshTokenJwt } from "../validators/token.validators";
 
 interface MulterFiles {
     [fieldname: string]: Express.Multer.File[];
@@ -53,6 +55,9 @@ const registerUser = asyncHandler(async (req, res) => {
     // check for user creation
     // return res
     const validationData = await validatePayload(registerValidator, req.body);
+    if ("error" in validationData) {
+        throw new ApiError(400, "Validation failed", validationData.error);
+    }
 
     const { fullName, email, username, password } = validationData;
     //console.log("email: ", email);
@@ -124,6 +129,9 @@ const loginUser = asyncHandler(async (req, res) => {
     //access and referesh token
     //send cookie
     const validationData = await validatePayload(loginValidator, req.body);
+    if ("error" in validationData) {
+        throw new ApiError(400, "Validation failed", validationData.error);
+    }
 
     const { email, username, password } = validationData;
 
@@ -160,6 +168,7 @@ const loginUser = asyncHandler(async (req, res) => {
         secure: true,
         sameSite: "strict" as const,
     };
+    console.log(accessToken);
 
     return res
         .status(200)
@@ -219,13 +228,9 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
         const decodedToken = jwt.verify(
             incomingRefreshToken,
             process.env.REFRESH_TOKEN_SECRET! as string,
-        );
-        const validatedToken = await validatePayload(
-            refreshTokenJwt,
-            decodedToken,
-        );
+        ) as JwtPayload;
 
-        const user = await User.findById(validatedToken._id);
+        const user = await User.findById(decodedToken._id);
 
         if (!user) {
             throw new ApiError(401, "Invalid refresh token");
@@ -269,6 +274,9 @@ const changeCurrentPassword = asyncHandler(async (req, res) => {
         changePasswordValidator,
         req.body,
     );
+    if ("error" in validationData) {
+        throw new ApiError(400, "Validation failed", validationData.error);
+    }
 
     const { oldPassword, newPassword } = validationData;
 
@@ -301,6 +309,9 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
         updateAccountValidator,
         req.body,
     );
+    if ("error" in validationData) {
+        throw new ApiError(400, "Validation failed", validationData.error);
+    }
 
     const { fullName, email } = validationData;
     if (!fullName || !email) {
@@ -334,6 +345,11 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
 
     //TODO: delete old image - assignment
 
+    const userRes = await User.findById(req.user?._id);
+    if (!userRes) {
+        throw new ApiError(404, "user not found");
+    }
+    const urlPath = userRes.avatar;
     const avatar = await uploadOnCloudinary(avatarLocalPath);
 
     if (!avatar?.url) {
@@ -349,6 +365,8 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
         },
         { new: true },
     ).select("-password");
+    const result = await deleteFromCloudinary(urlPath, "image");
+    console.log(result);
 
     return res
         .status(200)
@@ -363,6 +381,11 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
     }
 
     //TODO: delete old image - assignment
+    const userRes = await User.findById(req.user?._id);
+    if (!userRes) {
+        throw new ApiError(404, "user not found");
+    }
+    const urlPath = userRes.coverImage;
 
     const coverImage = await uploadOnCloudinary(coverImageLocalPath);
 
@@ -379,6 +402,10 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
         },
         { new: true },
     ).select("-password");
+    if (urlPath) {
+        const result = await deleteFromCloudinary(urlPath, "image");
+        console.log(result);
+    }
 
     return res
         .status(200)

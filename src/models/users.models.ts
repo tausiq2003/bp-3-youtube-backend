@@ -1,11 +1,6 @@
 import mongoose, { Schema } from "mongoose";
 import jwt, { type SignOptions } from "jsonwebtoken";
 import bcrypt from "bcrypt";
-import validatePayload from "../utils/validation";
-import {
-    accessTokenJwt,
-    refreshTokenJwt,
-} from "../validators/token.validators";
 
 interface UserDocument extends Document {
     _id: Schema.Types.ObjectId;
@@ -81,27 +76,27 @@ userSchema.methods.isPasswordCorrect = async function (password: string) {
     return await bcrypt.compare(password, this.password);
 };
 
-userSchema.methods.generateAccessToken = async function () {
-    const validatedPayload = await validatePayload(accessTokenJwt, {
+userSchema.methods.generateAccessToken = function () {
+    const payload = {
         _id: this._id,
         email: this.email,
         username: this.username,
         fullName: this.fullName,
-    });
+    };
     return jwt.sign(
-        validatedPayload,
+        payload,
         process.env.ACCESS_TOKEN_SECRET! as string,
         {
             expiresIn: process.env.ACCESS_TOKEN_EXPIRY!,
         } as SignOptions,
     );
 };
-userSchema.methods.generateRefreshToken = async function () {
-    const validatedPayload = await validatePayload(refreshTokenJwt, {
+userSchema.methods.generateRefreshToken = function () {
+    const payload = {
         _id: this._id,
-    });
+    };
     return jwt.sign(
-        validatedPayload,
+        payload,
         process.env.REFRESH_TOKEN_SECRET! as string,
         {
             expiresIn: process.env.REFRESH_TOKEN_EXPIRY!,
